@@ -31,55 +31,70 @@ const Dashboard = () => {
   }
 
   useEffect(() => {
-    const newU = localStorage.getItem("user");
-    const newUser = JSON.parse(newU);
-    const email = newUser.email;
-    const ID = newUser._id;
-
+    const storedUser = localStorage.getItem("user");
+    if (!storedUser) return;
+  
+    let newUser;
+    try {
+      newUser = JSON.parse(storedUser);
+    } catch (err) {
+      console.error("Invalid user data in localStorage");
+      return;
+    }
+  
+    const email = newUser?.email;
+    if (!email) return;
+  
     const getUser = async () => {
-      await axios.post("/getUser", { email }).then((data) => {
-        if (data) {
-          setUser(data.data);
+      try {
+        const res = await axios.post("/getUser", { email });
+  
+        if (res?.data) {
+          setUser(res.data);
+  
           const tBalance =
-            data.data.deposit + data.data.profit + data.data.bonuse;
-
+            (res.data.deposit || 0) +
+            (res.data.profit || 0) +
+            (res.data.bonuse || 0);
+  
           const formattedBalance = new Intl.NumberFormat("en-US", {
             minimumFractionDigits: 2,
             maximumFractionDigits: 2,
           }).format(tBalance);
-
+  
           setBalance(formattedBalance);
         }
-      });
-    };
-
-    const getUserVerification = async () => {
-      try {
-        const response = await axios.post("/getUserVerification", { email });
-
-        if (response.data.status === "success") {
-          console.log("User verification:", response.data.data);
-          setVerificationStatus(response.data.data);
-        }
       } catch (error) {
-        console.log(error);
+        console.error("Get user error:", error);
       }
     };
-
-    const FavTokens = () => {
+  
+    const getUserVerification = async () => {
+      try {
+        const res = await axios.post("/getUserVerification", { email });
+  
+        if (res.data?.status === "success") {
+          setVerificationStatus(res.data.data);
+        }
+      } catch (error) {
+        console.error("Verification error:", error);
+      }
+    };
+  
+    const connectTickerSocket = () => {
       const socket = new WebSocket(
         "wss://bitclub-websocket.onrender.com/ws/ticker"
       );
-
+  
       socket.onopen = () => {
         console.log("✅ MarkPrice WebSocket connected");
       };
-
+  
       socket.onmessage = (event) => {
         const msg = JSON.parse(event.data);
         const symbol = msg.symbol?.toUpperCase();
         if (!symbol) return;
-
+  
         setPricesTicker((prev) => ({
           ...prev,
           [symbol]: {
@@ -88,25 +103,25 @@ const Dashboard = () => {
           },
         }));
       };
-
+  
       socket.onerror = (err) => {
-        console.error("❌ MarkPrice WebSocket error:", err);
+        console.error("❌ WebSocket error:", err);
       };
-
+  
       socket.onclose = () => {
-        console.warn("🔌 MarkPrice WebSocket disconnected");
+        console.warn("🔌 WebSocket disconnected");
       };
-
+  
       return () => socket.close();
     };
-
+  
     getUser();
     getUserVerification();
-
-    const cleanup = FavTokens();
-
-    return cleanup;
+  
+    const cleanupSocket = connectTickerSocket();
+    return cleanupSocket;
   }, []);
+  
 
   const toggleBalanceVisibility = () => {
     setIsBalanceVisible((prev) => !prev);
